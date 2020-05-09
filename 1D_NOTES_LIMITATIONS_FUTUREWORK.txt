@@ -1,0 +1,13 @@
+N. Nazarian May 2019
+
+--------------------------------------------------
+**Notes and Limitations - specification of the 1D model**
+--------------------------------------------------
+1) NOTE: With the current forcing setup (pressure gradient), domain height of the 1D model should be at least 7 H (similar to the domain height of LES) to be able to remove the impact of top boundary condition on street-level flow and turbulent field. This is much higher than the usual domain height of 1D model when used in the BEP-tree or integrated in WRF (often 2-3H). In these conditions, the constant TKE value at top bounadry is recommended. 
+
+2) NOTE: The 1D model does not distinguish between the staggered and aligned configuration, while Cdeq variation and the flow profiles can be significantly influenced by the urban configuration. Overall, average wind speed, and consequently the turbulent momentum flux and TKE, are significantly larger for aligned array of cubes with streamwise flow aligned with urban street canyon. However, it is worth noting that in real cities, the aligned configuration with 0\degree wind angle may not be most representative of flow field. Real cities experience a range of wind directions relative to the street grid, and many cities do not have a grid but rather streets of many orientations. Our simulations (similar to many 'urban' CFD simulations) represent buildings with two street directions oriented perpendicular to each other, with streamwise flow oriented perpendicular to one set of building faces. The aligned version of this setup represents a special case relative to real cities: those scenarios where wind direction is aligned with one of the two street directions. The staggered version of this setup, conversely, presents no major corridors (i.e., streets) aligned with the wind that do not include building drag. As such, we believe that the staggered configuration better represents the impacts of real cities on urban canopy flow under a variety of wind directions. Any choice here is a simplification of reality, and the choice of a regular staggered array provides a closer approximation to average conditions in real cities in our estimation.
+--------------------------------------------------
+3) LIMITATION AND FUTURE DIRECTION: Dispersive TKE (\tilde{k}\tilde{w}) is not included in the k equation in the current version of the 1D model.
+
+4) LIMITATION AND FUTURE DIRECTION: The variability of wind direction is not integrated in the current version of the 1D model
+--------------------------------------------------

@@ -1,40 +1,45 @@
            program column
-! we will solve the drag and vertical diffusion in a column for neutral case
 !     ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 !     +    by A. Martilli,     CIEMAT  SP 2040 MADRID                  +
 !     +                        phone: ++34-9-13-46-62-99               +
 !     +                        email:alberto.martilli@ciemat.es        +
 !     ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 !     ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-!     +  Modified by S. Krayenhoff,  UBC      Mar 2013 - Jun 2014      +
+!     +  Modified by S. Krayenhoff,  UBC      Mar 2013 - Jun 2016      +
 !     +                        email:scott.krayenhoff@alumni.ubc.ca    +
 !     ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 !     ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-!     +  Modified by N. Nazarian,    Singapore-MIT   Jan-May 2017      +
-!     +                        email:negin@smart.mit.edu               +
-!                                   /nenazarian@gmail.com              +
+!     +  Modified by N. Nazarian, Singapore-MIT/UNSW                   +
+!     +  Jan 2017-Sept 2019                                            +
+!     +                        email: n.nazarian@unsw.edu.au           +
+!     +                               nazarian@mit.edu                 +
+!     +                               nenazarian@gmail.com             +
 !     ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+!     ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+!     Goal: To solve the drag and vertical diffusion in a column for   +
+!           neutral case.
+!     NOTE: This is based on LES parameterizatin 					   +
+!          (Nazarian et al. 2019 forthcoming)                          +
 
            implicit none
            integer nzm,nlp,nzc,nscen
-           parameter (nzm=112)    ! number of total levels in the vertical
-           parameter (nzc=18)    ! number of canopy levels in the vertical
+           parameter (nzm=128)    ! number of total levels in the vertical
+           parameter (nzc=16)    ! number of canopy levels in the vertical
            parameter (nlp=1)
            parameter (nscen=1)  ! number of scenarios
-   
 ! flow variables
            real vx(nzm) ! x component of the wind
            real vy(nzm) ! y component of the wind
            real tke(nzm) ! tke
            real trc(nzm) ! trc
            real dpdx,dpdy ! external pressure gradient in x and y direction
-           real utau_x,utau_y ! utau
-! variable needed in the calculation of the TKE and vertical diffusion
+           real utau_x,utau_y ! utau 
+! variable needed in the calculation of the TKE and vertical diffusion  
            real dlk(nzm) ! mixing length
            real dls(nzm) ! dissipation length scale
            real cdz(nzm+1) ! vertical diffusion coefficients
            real ceps,ck,cmu ! constants for the k-l scheme
-           parameter (ceps=1/1.4,ck=0.4,cmu=0.09)
+!           parameter (ceps=1/1.4,ck=0.4,cmu=0.09)
 ! variables needed in the resolution of the diffusion equation: here source/sinks for a generic variable c are defined as c*srim_c+srex_c
            real srim_vx(nzm) ! implicit part of the source/sinks terms of v1
            real srim_vy(nzm) ! implicit part of the source/sinks terms of v2
@@ -47,7 +52,7 @@
            real vl(nzm) ! fraction of air in each cell
            real sf(nzm+1) ! fraction of air at the interface between cells
 ! drag coefficient
-           real cdragx(nzm),cdragy(nzm) ! drag coefficient in x and y direction
+           real cdragx(nzm),cdragy(nzm) ! drag coefficient in x and y direction           
 ! building information
            real ss(nzm+1) ! ss(iz)=probability to have a building of height z(iz)
            real pb(nzm+1) ! pb(iz)=probbaility to have a building taller or equal to z(iz)
@@ -70,7 +75,7 @@
            real time_max ! total time of the simulation
            integer ntime ! total number of timesteps
            real prtime ! frequency of output
-! output variables
+! output variables 
            real uw(nzm+1) ! turbuelnt flux of vx
            real duwdz(nzm) ! vertical derivative of the turbulent flux of vx
            real vw(nzm+1) ! turbuelnt flux of vy
@@ -79,7 +84,7 @@
            real dwtkedz(nzm) ! vertical derivative of the turbulent flux of tke
            real wtrc(nzm+1) ! turbuelnt flux of tracer
            real dwtrcdz(nzm) ! vertical derivative of the turbulent flux of tracer
-
+           
 
 ! working
            real uwm,wtrcm,lad_max
@@ -99,7 +104,7 @@
            logical no_cdragbld,no_cdragbld1
 		   
 ! --------------------------------------------
-!        Neg April 2017: Added to 1) introduce output files, and 2) include heather line in output file     
+! NN. April 2017: Added to 1) introduce new output files, and 2) include header line in output file     
 ! c OPEN OUTPUT FILES
        open(unit=68,file='output_final.out')
        open(unit=30,file='calc_par.out')
@@ -109,20 +114,19 @@
         2001 format ( 8(A,7X)) 
         2011 format (1x,2(A,4X))
 ! --------------------------------------------
-! --------------------------------- FUTURE modifications		   
-!    ------------ May 2017 - namelist format can be added to allow modification 
-!                 of input parameters outside of the code in the inupdate.in file. 
-! --------------- However, this requires that parameters of type real to be changed 
+! --------------------------- Alternative input file		   
+! --------------- NN. May 2017 - namelist format can be added to allow modification 
+! --------------- of input parameters outside of the code in the inupdate.in file. 
+! --------------- This requires that parameters of type real to be changed 
 ! --------------- to allocatble format. 
 !        Ex: real dlk(nzm) --> real,allocatable,dimension(:) :: dlk
 !        namelist /inipar/ nzm, nzc, nlp, nscen
 !      open(444,file='inupdate.in',status='OLD',recl=80,
 !      &      delim='APOSTROPHE', FORM='FORMATTED')
 !      read(444,nml=inipar)
-!    ------------
 ! --------------------------------------------
    
-! --------------------------- Jan 2017 Neg commented out specification of vegetation
+! --------------------------- This section can be uncommented if specification of trees (lad profile) is of focus
 ! read cases
 !          open(unit=75,file='z.out')
 !           read(75,*)(z(iz),iz=1,nzm)
@@ -134,13 +138,16 @@
 !            read(75,*)(lad(is,iz),iz=1,nzm)
 !           enddo
 !                 close(75)
+! --------------------------------------------
 
-! ---------------------------- Jan 2017 Neg changed file format to .dat
+
+! ---------------------------- Input file for lambdaP values 
           open(unit=75,file='lambdaP.dat')
            do is=1,nscen
             read(75,*)lambdap(is)
            enddo
          close(75)
+! --------------------------------------------
 
           cdragveg=0.2
           cdragveg1=0.2
@@ -175,7 +182,7 @@
 ! altered length scales due to presence of buildings............?
 
 
-          if(no_cdragveg) cdragveg=0.
+          if(no_cdragveg) cdragveg=0. 
           if(no_cdragveg1) cdragveg1=0.
           if(no_cdragveg2) cdragveg2=0.
 
@@ -183,8 +190,9 @@
 ! read the input, define the mesh and obstacle paramters and intialize
            call read_input(nzm,nz,z,dz,dt,time_max,ntime,prtime,utau_x,utau_y,dpdx,dpdy, &
                            pb,ss,wx,wy,bx,by,hmean,vl,sf)
-
+				   
           do is=1,nscen
+
            write(6,*)'IS =',is
            write(6,*)'Lp =',lambdaP
 !           lad_max=0.
@@ -193,18 +201,9 @@
 !            lad_in(iz)=lad(is,iz)
 !           enddo
 
-!Temporary, for Negin's data:
-! Jan 2017 Taken out by Negin to input in file "input_column"
-!           bx=21.
-!           wx=18.
-!           zh=18.
-!Temporary, aligned case with lambdap = 0.25:
-!           bx=18.
-!           wx=18.
-!           zh=18.
-!           do iz=1,nzm
-!            lambdap(is)=bx*bx/(bx+wx)**2.
-!           enddo
+           do iz=1,nzm
+            lambdap(is)=bx*bx/(bx+wx)**2.
+           enddo
 
            do iz=1,nzm
             vl(iz)=1.-lambdap(is)*pb(iz+1)
@@ -239,10 +238,10 @@
 
            time=0.
            time_pr=0.
-
+           
 !           open(unit=66,file='output.out')
 
-! start the loop on time
+! start the loop on time 
            do it=1,ntime
             srex_vx=0.
             srim_vx=0.
@@ -263,7 +262,7 @@
 
              call building(nzm,nz,dz,pb,vl,vx,vy,cdragx,cdragy,cdragx1,cdragy1,cdragveg,cdragveg1,cdragveg2,lambdap(is),wx,wy,bx,by,lad_in,srim_vx,srim_vy,srex_tke,srim_tke)
              call tke_bougeault(nzm,nz,ceps,dz,vx,vy, &
-                                tke,cdz,dls,sf, &
+                                tke,cdz,dls,sf, &                      
                                 srim_tke,srex_tke)
          !    write(*,*)'srex_vx',srex_vx
 
@@ -280,14 +279,11 @@
             call diff(nzm,nz,1,1,dt,trc,cdz,srim_trc,srex_trc,sf,vl,dz,wtrc,dwtrcdz)
 
               if(time_pr.gt.prtime)then
-               write(*,*)'time=',time, vx(nzc)
+               write(*,*)'time=',time, vx(nzc) !, wtke, dwtkedz
                time_pr=dt
-!               write(66,*)'time=',time,'time_pr=',time_pr
                do iz=1,nz
                 uwm=(uw(iz)+uw(iz+1))/2.
-!                write(66,*)iz,vx(iz)/utau_x,tke(iz)/(utau_x**2.),uwm/(utau_x**2.)
                enddo
-!               write(67,*)vx(nzc),tke(nzc),uw(nzc),trc(nzc)
               endif
            enddo
 !           close(66)
@@ -303,15 +299,15 @@
            enddo ! loop over scenarios
 
            stop
-           end
+           end   
 
 !-------------------------------------------------------------
-           subroutine read_input(nzm,nz,z,dz,dt,time_max,ntime,prtime,utau_x,utau_y,dpdx,dpdy,pb,ss,wx,wy,bx,by,hmean,vl,sf)
+           subroutine read_input(nzm,nz,z,dz,dt,time_max,ntime,prtime,utau_x,utau_y,dpdx,dpdy,pb,ss,wx,wy,bx,by,hmean,vl,sf)          
            implicit none
            integer nzm
 ! flow variables
-           real dpdx,dpdy ! external pressure gradient
-           real utau_x,utau_y ! external pressure gradient
+           real dpdx,dpdy ! external pressure gradient 
+           real utau_x,utau_y ! external pressure gradient 
 ! building information
            real ss(nzm+1) ! ss(iz)=probability to have a building of height z(iz)
            real pb(nzm+1) ! pb(iz)=probbaility to have a building taller or equal to z(iz)
@@ -327,12 +323,12 @@
            integer ntime ! total number of timesteps
            real prtime ! frequency of output
            real vl(nzm) ! fraction of air in each cell
-           real sf(nzm+1) ! fraction of air at the interface between cells
-           real time_max
+           real sf(nzm+1) ! fraction of air at the interface between cells  
+           real time_max            
 ! Local
            character*256 line
            real hgt(nzm+1),prb(nzm+1),sstot,lambdap
-
+           
 !
             open(unit=20,file='input_column.dat')
 10          read(20,'(A256)',END=20) line
@@ -371,10 +367,10 @@
               write(*,*)'hgt(jz),prb(jz)',hgt(jz),prb(jz)
               jz=jz+1
               goto 14
-15            continue
-
+15            continue 
+             
             end if
-
+            
            if (index(line,'time step (dt)').ne.0) then
              read(20,*) dt
             end if
@@ -387,12 +383,12 @@
              read(20,*) prtime
             end if
 
-
+            
       go to 10
 
  20   continue
 
-
+      
 
 ! define the mesh
 
@@ -415,9 +411,9 @@
                 sstot=sstot+ss(jz)
                enddo
                pb(iz)=sstot
-             enddo
+             enddo 
 ! compute fraction of air for each grid cell
-!             lambda_p=bx*by/((wx+bx)*(wy+by))
+!             lambda_p=bx*by/((wx+bx)*(wy+by)) 
 
               sf(nzm+1)=1.
 ! compute mean height
@@ -425,7 +421,7 @@
              do iz=1,nz
               hmean=hmean+z(iz)*ss(iz)
              enddo
-
+         
 !
 ! pressure gradient
             dpdx=(utau_x**2.)/z(nz)
@@ -436,51 +432,46 @@
 
       return
       end
-! April 2016 by Neg: added bx by wx wy as the input of this function to avoid hard-coded input of bx by
+! April 2016 by NN: added bx by wx wy as the input of this function to avoid hard-coded input of bx and by
 !-----------------------------------------------------------------
       subroutine drag_length(nzm,nz,z,bx,by,wx,wy,hmean,lambdap,ceps,ck,cmu,cdragx,cdragy,dls,dlk)
       implicit none
 ! input
       integer nzm,nz,iz
       real z(nzm+1)
-      real dls(nzm),dlk(nzm)
+      real dls(nzm),dlk(nzm)      
       real hmean
       real ceps,ck,cmu,lambdap
 ! output
       real cdragx(nzm),cdragy(nzm)
 !local
-      real disp,a1,a2,zc,d2
+      real disp,zc
       real lambdaf_x,lambdaf_y,bx,by,wx,wy,zh
 !-----------------------------------------------------------------
-! May 2017 Neg: added for calculating the coefficent of the polynomial	fit for lk   
+! May 2019 NN: added for calculating the 1) Cmu and 2) Ceps below and above the building height
 ! based on LES 
-! Staggered only now 
+! Staggered data used so far
+! the drag coefficent is also updated based on LES but is very similar to RANS
 !-----------------------------------------------------------------
-      real aa1, aa2, aa3 
-      aa1=-0.351-0.811*exp(-lambdap/0.086)
-      aa2=2.822+7.971*exp(-lambdap/0.078)
-      aa3=-1.721-13.328*exp(-lambdap/0.047)
-
-      write(*,*)aa1,aa2,aa3
-!----------------------Neg april 2017
-! ------ This part was commented and instead input parameters included for the function
-!Temporary, for Negin's data:
-! 	bx=16.
-! 	wx=16.
-!   zh=18.
-
-! assuming square buildings, not accounting for variable pb (assuming pb = 1 below zH):
-!       bx=sqrt(lambdap)
-!       by=bx
-!       wx=1.-bx
-!       wy=wx
-
-
+      real a1,a15,a2, d1, d15,d2 
+      real cmu_can, cmu_above
+!-----------------------------------------------------------------	 
+! In the canopy, Cmu = max(0.05, -1.6*lp^2 + 0.75*lp + 0.022)
+! for z/H<1, Leps/Ceps=a1*(zc-d1), and a1 derived from LES data 
+      a1 =  4.0
+! a2 is derived for z/H<1.5 from LES results:
+	  !a15 (i.e constant at 1<z/H<1.5) is kept similar to a1
+      a15=  4.0
+      a2=amin1(5.,amax1(2.,1.3*lambdap**(-0.45)))
+! derived from LES results
+      cmu_can=amax1(0.05,-1.6*lambdap**2+0.75*lambdap+0.022)
+      cmu_above=0.05
+!-----------------------------------------------------------------  
+!-----------------------------------------------------------------	 
 ! since normalized mean building height is 1.0, and normalized urban unit area is 1.0
-       zh=hmean
-       lambdaf_x=bx*zh/((bx+wx)*(by+wy))
-       lambdaf_y=by*zh/((bx+wx)*(by+wy))
-!            write(30,*)'Scenario number=', is
+      zh=hmean
+      lambdaf_x=bx*zh/((bx+wx)*(by+wy))
+      lambdaf_y=by*zh/((bx+wx)*(by+wy))
             write(30,*)'Lfx =',lambdaf_x
             write(30,*)'Lp =',lambdap
             write(30,*)'bx=',bx, ' wx=', wx
@@ -495,36 +486,59 @@
 
 ! Drag coefficient
 ! The 'do' and 'if' statements need to be reversed in order for the final model version (so that cdrag depends on lambdaP*pb at each level)
-
-! ---------------April 2017 by Neg: Parameterization of drag modified based on the LES results 
-      if(lambdaf_x.le.0.44)then
-      do iz=1,nz
-        cdragx(iz)=(-6.556*(lambdap)**(2)+10.4*(lambdap)-0.062)
+! ---------------May 2019 by Neg: Parameterization of drag modified based on the LES results updated with rho=1
+      if(lambdaf_x.le.0.4)then
+       do iz=1,nz
+        cdragx(iz)=-10.8*(lambdap)**(2)+13.3*(lambdap)
         cdragy(iz)=cdragx(iz)
        enddo
-	  else
+      else
        do iz=1,nz
-        cdragx(iz)=3.245
-        cdragy(iz)=3.245
+        cdragx(iz)=3.77
+        cdragy(iz)=3.77
        enddo
       endif
 
-!----------- Added by Negin May 2016--- --------------------------
+!----------- Added by NN May 2019--- --------------------------
 ! ------------------length scale CkLk -----------------------------
 ! ------------------note that Ck is included in the parameterizatin ---------
-        write(37,*) ' zc/hmean  ', ' CkLkM'
+! For Cmu calculations, the average value below the building height is varied with height, and constant above the building 
+! Cmu (z>H)=0.05
+
+        write(37,*) ' zc/hmean  ', ' CkLkM  ', '  Leps/Ceps', '  Cmu '
       do iz=1,nz
        zc=(z(iz)+z(iz+1))/2.
 !  based on wpup + wtut 
-!  ----  2nd degree polynomial fit for length scale        
-       if((zc/hmean).le.1.)then
-       dlk(iz)= -421.1*(lambdap)**4+554.3*lambdap**3-265.82*lambdap**2+47.35*lambdap-0.33
-       elseif((zc/hmean).gt.1.)then
-       dlk(iz)= aa1*(zc/hmean)**2 +aa2*(zc/hmean)+ aa3  !  based on both upwp and upwp+wtut
-       endif
-       dls(iz)=dlk(iz)/Cmu ! This is Leps/Ceps and the value of Cmu is based on RANS
-       write(37,*) zc/hmean, dlk(iz)
-      enddo
+        if(hmean.eq.0.) then
+! this must be the case to match the parameterization when hmean>0 (i.e., as hmean -> 0)
+! NOTE: dls includes the ceps 
+         dls(iz)=a2*zc
+         cmu=cmu_can
+       else      
+!       write(*,*)'here1',disp,hmean
+       if((zc/hmean).le.1.) then
+          dls(iz)=a1*(hmean-disp)
+          cmu=cmu_can
+          if(zc/hmean.gt.0.9) cmu=(cmu_can*(1.1-zc/hmean)+ &
+                      cmu_above*(zc/hmean-0.9))/0.2
+        elseif((zc/hmean).gt.1..and.(zc/hmean).le.1.5)then
+         d15=(1.-a1/a15)*hmean+a1/a15*disp
+         dls(iz)=a15*(zc-d15)       
+         cmu=cmu_above
+         if(zc/hmean.lt.1.1) cmu=(cmu_can*(1.1-zc/hmean)+ &
+                      cmu_above*(zc/hmean-0.9))/0.2
+          elseif((zc/hmean).gt.1.5)then
+          d2=(1.-a15/a2)*1.5*hmean+a15/a2*d15
+          dls(iz)=a2*(zc-d2)
+          cmu=cmu_above
+         endif
+! Similarly: dlk inclused Ck 
+         dlk(iz)=cmu*dls(iz)
+        endif
+!        write(126,*)'DRAG,LS',iz,cdrag(iz),dls(iz)
+!       cdrag(iz)=cdrag(iz)/4.
+        write(37,*) zc/hmean, dlk(iz), dls(iz), cmu
+       enddo
 ! --------------------------------------------------------------------
       return
       end
@@ -533,7 +547,7 @@
 ! ===6================================================================72
 ! ===6================================================================72
 
-      subroutine cdtur(nzm,nz,ck,tke,dlk,cdz)
+      subroutine cdtur(nzm,nz,ck,tke,dlk,cdz)                                  
 
 
       implicit none
@@ -564,27 +578,27 @@
        do iz=2,nz
         tke_m=(tke(iz-1)+tke(iz))/2.
         dlk_m=(dlk(iz-1)+dlk(iz))/2.
-! ----------Modified by Neg Jan 2017 to parameterize CkLk instead of Lk alone
+! ----------Modified by NN Jan 2017 to parameterize CkLk instead of Lk alone
 !        cdz(iz)=ck*dlk_m*sqrt(tke_m)
         cdz(iz)=dlk_m*sqrt(tke_m)
        enddo
        cdz(nz+1)=cdz(nz)
 
        return
-       end
+       end  
 
 ! ===6================================================================72
 
       subroutine building(nzm,nz,dz,pb,vl,vx,vy,cdragx,cdragy,cdragx1,cdragy1,cdragveg,cdragveg1,cdragveg2,lambdap,wx,wy,bx,by,lad,srim_vx,srim_vy,srex_tke,srim_tke)
       implicit none
-! input
+! input      
       integer nzm
       integer nz,iz
       real dz,pb(nzm+1),vl(nzm)
       real cdragx(nzm),cdragy(nzm),wx,wy,bx,by
       real vx(nzm),vy(nzm),lambdap
       real cdragx1(nzm),cdragy1(nzm),cdragveg,cdragveg1,cdragveg2,lad(nzm)
-! output
+! output      
       real srim_vx(nzm),srim_vy(nzm),srex_tke(nzm),srim_tke(nzm)
 ! local
       real lfx,lfy,wx_tmp,bx_tmp
@@ -603,17 +617,18 @@
 !       endif
        wx_tmp=1.-bx_tmp
 ! --------------------
-!      Neg May 2017: this calculation replaces the value of wx and wy from the user input, therefore
+!      NN May 2017: this calculation replaces the value of wx and wy from the user input, therefore
 !                    it is not accurate to use nscen~=1. Recommand using different symbol 
        wx=wx_tmp*bx/max(bx_tmp,1.e-9)
        wy=wx
+
        lfx=dz*by/((wx+bx)*(wy+by))*pb(iz+1)
        lfy=dz*bx/((wx+bx)*(wy+by))*pb(iz+1)
        srim_vx(iz)=-(lfx/vl(iz)/dz*cdragx(iz)+lad(iz)/vl(iz)*cdragveg)*abs(vx(iz))
        srim_vy(iz)=-(lfy/vl(iz)/dz*cdragy(iz)+lad(iz)/vl(iz)*cdragveg)*abs(vy(iz))
 !       srim_vx(iz)=-lfx/vl(iz)/dz*cdragx(iz)*abs(vx(iz))
 !       srim_vy(iz)=-lfy/vl(iz)/dz*cdragy(iz)*abs(vy(iz))
-! not sure it is like this for tke, but for wind orthotogonal to the face of the cube,
+! not sure it is like this for tke, but for wind orthotogonal to the face of the cube, 
 ! vy=0.
        srex_tke(iz)=cdragx1(iz)*(lfx/vl(iz)/dz*(abs(vx(iz))**3.))+cdragy1(iz)*(lfy/vl(iz)/dz*(abs(vy(iz))**3.))+lad(iz)/vl(iz)*cdragveg1*(abs(vx(iz))**3.+abs(vy(iz))**3.)
 !       srex_tke(iz)=cdragx1(iz)*(lfx/vl(iz)/dz*(abs(vx(iz))**3.))+cdragy1(iz)*(lfy/vl(iz)/dz*(abs(vy(iz))**3.))
@@ -625,8 +640,8 @@
 
       return
       end
-
-!------------------------------------------------
+      
+!------------------------------------------------     
 
       subroutine tke_bougeault (nzm,nz,ceps,dz,vx,vy, &
                                 tke,cdz,dls,sf, &                       ! Input
@@ -643,11 +658,11 @@
 ! Input
 ! -----
       integer nz,nzm                               ! number of vertical levels
-
+    
       real ceps
       real dz                                  ! levels size [m]
       real vx(nzm)                              ! wind velocity
-      real vy(nzm)                              ! wind velocity
+      real vy(nzm)                              ! wind velocity     
       real tke(nzm)                             ! turbulent kinetic energy
       real cdz(nzm+1)                           ! turbulent diffusion coefficient
       real dls(nzm)                             ! lrngth scale leps
@@ -746,7 +761,7 @@
         dumdz=0.5*((dudz1**2.+dvdz1**2)+(dudz2**2.+dvdz2**2))
 
         sh(iz)=cdm*dumdz
-
+  
       enddo  ! iz
 
       sh(nz)=0.
@@ -754,7 +769,7 @@
       return ! shear
       end
 
-! ===6================================================================72
+! ===6================================================================72 
 ! ===6=8===============================================================72
 
        subroutine diff(nzm,nz,iz1,izf,dt,co,cd,aa,bb,sf,vl,dz,fc,df)
@@ -764,11 +779,11 @@
 !     +        Ecole Polytechnique Federale de Lausanne                 +
 !     +   DGR - IGE - Laboratoire de Pollution de l'Air et des Sols     +
 !     +            tel.: (021)-693-61-60                                +
-!     +            Email: alberto.martilli@dgr.epfl.ch                  +
+!     +            Email: alberto.martilli@dgr.epfl.ch                  + 
 !     +++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 !------------------------------------------------------------------------
-!           Calculation of the diffusion in 1D
+!           Calculation of the diffusion in 1D        
 !------------------------------------------------------------------------
 !  - Input:
 !       nz    : number of points
@@ -782,14 +797,14 @@
 !       co :concentration of the variable of interest
 
 !  - Internal:
-!       cddz  : constant terms in the equations
+!       cddz  : constant terms in the equations 
 !       dt    : diffusion time step
 !       nt    : number of the diffusion time steps
 !       cstab : ratio of the stability condition for the time step
 !---------------------------------------------------------------------
 
          implicit none
-
+                
          integer nz,nzm,iz,iz1,izf
          real co(nzm),cd(nzm+1),dz,dt,dzv
 
@@ -797,9 +812,9 @@
          real a(nzm,3),c(nzm)
          real sf(nzm+1),vl(nzm)
          real aa(nzm),bb(nzm)
-
-! Compute cddz=2*cd/dz
-
+        
+! Compute cddz=2*cd/dz  
+        
         cddz(1)=sf(1)*cd(1)/dz
         do iz=2,nz
          cddz(iz)=2.*sf(iz)*cd(iz)/(2.*dz)
@@ -815,21 +830,21 @@
           a(iz,3)=0.
           c(iz)=co(iz)
          enddo
-
+          
           do iz=iz1,nz-izf
            dzv=vl(iz)*dz
-           a(iz,1)=-cddz(iz)*dt/dzv
+           a(iz,1)=-cddz(iz)*dt/dzv         
            a(iz,2)=1+dt*(cddz(iz)+cddz(iz+1))/dzv-aa(iz)*dt
-           a(iz,3)=-cddz(iz+1)*dt/dzv
-           c(iz)=co(iz)+bb(iz)*dt
+           a(iz,3)=-cddz(iz+1)*dt/dzv            
+           c(iz)=co(iz)+bb(iz)*dt                     
           enddo
 
           if(izf.eq.1)then
            dzv=vl(nz)*dz
-           a(nz,1)=-cddz(nz)*dt/dzv
+           a(nz,1)=-cddz(nz)*dt/dzv        
            a(nz,2)=1+dt*(cddz(nz))/dzv-aa(nz)*dt
-           a(nz,3)=0.
-           c(nz)=co(nz)+bb(nz)*dt
+           a(nz,3)=0.            
+           c(nz)=co(nz)+bb(nz)*dt   
           else
            do iz=nz-izf+1,nz
             a(iz,1)=0.
@@ -840,19 +855,19 @@
           endif
 
           call invert (nzm,nz,a,c,co)
-
-          do iz=1,iz1
+                  
+          do iz=1,iz1 
            fc(iz)=0.
           enddo
-
-          do iz=iz1+1,nz
+          
+          do iz=iz1+1,nz 
            fc(iz)=-(cddz(iz)*(co(iz)-co(iz-1)))
           enddo
-
+        
           do iz=1,iz1
            df(iz)=0.
           enddo
-
+          
           do iz=iz1+1,nz-izf
            dzv=vl(iz)*dz
            if(iz.lt.nz)then
@@ -864,41 +879,41 @@
                  -co(iz)*(cddz(iz)+cddz(iz+1)))/dzv
            endif
           enddo
-
-          do iz=nz-izf,nz
+          
+          do iz=nz-izf,nz 
            df(iz)=0.
           enddo
-
+                                        
        return
        end
 !----------------------------------------------------------------------------
 
        subroutine invert(nzm,nn,a,c,x)
        implicit none
-
-!ccccccccccccccccccccccccccccccc
+       
+!ccccccccccccccccccccccccccccccc       
 ! Aim: INversion and resolution of a tridiagonal matrix
 !          A X = C
 ! Input:
 !  a(*,1) lower diagonal (Ai,i-1)
 !  a(*,2) principal diagonal (Ai,i)
 !  a(*,3) upper diagonal (Ai,i+1)
-!  c
+!  c      
 ! Output
 !  x     results
-!ccccccccccccccccccccccccccccccc
+!ccccccccccccccccccccccccccccccc 
        integer nzm,nn,in
-       real a(nzm,3),c(nzm),x(nzm)
-
-        do in=nn-1,1,-1
+       real a(nzm,3),c(nzm),x(nzm)                       
+        
+        do in=nn-1,1,-1                 
          c(in)=c(in)-a(in,3)*c(in+1)/a(in+1,2)
          a(in,2)=a(in,2)-a(in,3)*a(in+1,1)/a(in+1,2)
         enddo
-
-        do in=2,nn
+        
+        do in=2,nn        
          c(in)=c(in)-a(in,1)*c(in-1)/a(in-1,2)
         enddo
-
+        
         do in=1,nn
          x(in)=c(in)/a(in,2)
         enddo
